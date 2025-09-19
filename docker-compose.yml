@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: wc-redis
+    ports:
+      - "6379:6379"
+
+  server:
+    build: ./server
+    container_name: wc-server
+    volumes: 
+      - ./server/data:/data:ro
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_TTL_SECONDS: "86400" # cache for 1 day
+      RPYC_PORT: "18861"
+      DOCS_DIR: "/data"
+    depends_on:
+      - redis
+    ports:
+      - "18861:18861"
+
+  # Client is optional as a long-running service; we run it on-demand.
+  client:
+    build: ./client
+    container_name: wc-client
+    depends_on:
+      - server
+    entrypoint: ["python", "client.py"]

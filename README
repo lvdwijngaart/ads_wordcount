@@ -1,0 +1,6 @@
+## Setup the containers: 
+
+- Make sure your terminal is located in the folder where you have the docker-compose.yml
+- call `docker compose up`
+- server container will be created and start running, and so will the client but it will stop running immediately because it misses input arguments
+- in a seperate terminal, call docker compose run -rm client <doc reference> <keyword>
