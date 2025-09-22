@@ -1,0 +1,11 @@
+FROM python:3.12-slim
+
+ENV REQUIREMENTS="requirements.txt"
+
+WORKDIR /app
+
+COPY ${REQUIREMENTS} .
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r ${REQUIREMENTS}
+
+COPY . .

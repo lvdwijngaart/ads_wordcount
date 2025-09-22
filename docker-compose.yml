@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   redis:
     image: redis:7-alpine
@@ -8,10 +6,12 @@ services:
       - "6379:6379"
 
   server:
-    build: ./server
     container_name: wc-server
-    volumes: 
-      - ./server/data:/data:ro
+    build:
+      context: ./server
+      dockerfile: ../adsimg.Dockerfile
+    volumes:
+      - ./server/data:/data
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -22,11 +22,13 @@ services:
       - redis
     ports:
       - "18861:18861"
-
+    entrypoint: ["python", "-u", "main.py"]
   # Client is optional as a long-running service; we run it on-demand.
   client:
-    build: ./client
     container_name: wc-client
+    build:
+      context: ./client
+      dockerfile: ../adsimg.Dockerfile
     depends_on:
       - server
-    entrypoint: ["python", "client.py"]
+    entrypoint: ["python", "-u", "main.py", "--mock"]
