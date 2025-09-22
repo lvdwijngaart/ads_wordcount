@@ -23,12 +23,27 @@ services:
     ports:
       - "18861:18861"
     entrypoint: ["python", "-u", "main.py"]
-  # Client is optional as a long-running service; we run it on-demand.
-  client:
-    container_name: wc-client
+  # Mock clients to create artificial server load
+  client-mock:
+    scale: 5
     build:
       context: ./client
       dockerfile: ../adsimg.Dockerfile
     depends_on:
       - server
+    environment:
+      RPYC_HOST: "server"
+      RPYC_PORT: "18861"
     entrypoint: ["python", "-u", "main.py", "--mock"]
+
+  # Interactive client to attach to
+  client-interactive:
+    build:
+      context: ./client
+      dockerfile: ../adsimg.Dockerfile
+    depends_on:
+      - server
+    environment:
+      RPYC_HOST: "server"
+      RPYC_PORT: "18861"
+    entrypoint: ["tail", "-f", "/dev/null"]
