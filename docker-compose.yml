@@ -1,15 +1,14 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: wc-redis
     ports:
       - "6379:6379"
 
   server:
-    container_name: wc-server
     build:
       context: ./server
-      dockerfile: ../adsimg.Dockerfile
+      additional_contexts:
+        common: ./common
     volumes:
       - ./server/data:/data
     environment:
@@ -22,28 +21,27 @@ services:
       - redis
     ports:
       - "18861:18861"
-    entrypoint: ["python", "-u", "main.py"]
-  # Mock clients to create artificial server load
+  # Mock client to create artificial server load
   client-mock:
-    scale: 5
     build:
       context: ./client
-      dockerfile: ../adsimg.Dockerfile
+      additional_contexts:
+        common: ./common
     depends_on:
       - server
     environment:
       RPYC_HOST: "server"
       RPYC_PORT: "18861"
-    entrypoint: ["python", "-u", "main.py", "--mock"]
 
   # Interactive client to attach to
   client-interactive:
     build:
       context: ./client
-      dockerfile: ../adsimg.Dockerfile
+      additional_contexts:
+        common: ./common
     depends_on:
       - server
     environment:
-      RPYC_HOST: "server"
+      RPYC_HOST: "server-1"
       RPYC_PORT: "18861"
     entrypoint: ["tail", "-f", "/dev/null"]

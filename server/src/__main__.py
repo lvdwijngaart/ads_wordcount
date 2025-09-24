@@ -5,6 +5,8 @@ import rpyc
 from rpyc.utils.server import ThreadedServer
 import redis
 
+from common import WordCountInterface, CountWordsResponse
+
 # --- Config ---
 REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
@@ -29,25 +31,28 @@ def cache_key(doc_id: str, text: str) -> str:
     h = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return f"wc:{doc_id}:{h}"
 
-class WordCountService(rpyc.Service):
-    def exposed_list_docs(self):
+@rpyc.service
+class WordCountService(rpyc.Service, WordCountInterface):
+    @rpyc.exposed
+    def list_docs(self) -> list[str]:
         """ List available documents """
         return [f for f in os.listdir(DOCS_DIR) if os.path.isfile(os.path.join(DOCS_DIR, f))]
 
-    def exposed_count_words(self, doc_id: str, keyword: str) -> dict:
+    @rpyc.exposed
+    def count_words(self, doc: str, keyword: str) -> CountWordsResponse:
         """
         Returns {"count": int, "cached": bool}
         Caches by hashing the input text.
         """
-        key = cache_key(doc_id, keyword)
+        key = cache_key(doc, keyword)
         cached_val = rd.get(key)
         if cached_val is not None:
             try:
-                return {"doc": doc_id, "keyword": keyword, "count": int(cached_val.decode("utf-8")), "cached": True}
+                return {"doc": doc, "keyword": keyword, "count": int(cached_val.decode("utf-8")), "cached": True}
             except Exception:
                 # Fall through to recompute if parsing fails
                 pass
-        text = read_document(doc_id)
+        text = read_document(doc)
 
         # Count occurrences
         pattern = rf"\b{re.escape(keyword)}\b"
@@ -55,7 +60,7 @@ class WordCountService(rpyc.Service):
 
         # Cache as plain integer string with TTL
         rd.set(key, str(count), ex=REDIS_TTL)
-        return {"doc": doc_id, "keyword": keyword, "count": count, "cached": False}
+        return {"doc": doc, "keyword": keyword, "count": count, "cached": False}
 
 if __name__ == "__main__":
     print(f"Connecting to Redis at {REDIS_HOST}:{REDIS_PORT} ...")
