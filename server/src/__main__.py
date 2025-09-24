@@ -14,7 +14,7 @@ REDIS_TTL = int(os.environ.get("REDIS_TTL_SECONDS", "86400"))
 RPYC_PORT = int(os.environ.get("RPYC_PORT", "18861"))
 DOCS_DIR = os.environ.get("DOCS_DIR", "/data")
 
-# Connect to Redis (single connection reused)
+# Redis connection
 rd = None
 
 def read_document(doc_id: str) -> str:

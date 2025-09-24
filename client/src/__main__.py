@@ -1,3 +1,5 @@
+# pyright: reportAbstractUsage=false
+
 import os
 import sys
 import rpyc
@@ -12,12 +14,34 @@ RPYC_PORT = int(os.environ.get("RPYC_PORT", "18861"))
 MOCK_SEND_INTERVAL = int(os.environ.get("MOCK_SEND_INTERVAL", "1000"))
 
 keyword_list = [
-    "hello",
-    "hi",
-    "world",
+    "paul",
+    "duke",
+    "fremen",
+    "sand",
+    "desert",
+    "water",
+    "spice",
+    "leto",
+    "atreides",
+    "arrakis",
+    "jessica",
+    "reverend",
+    "mentat",
+    "harkonnen",
+    "baron",
+    "emperor",
+    "sardaukar",
+    "prophet",
+    "stilgar",
+    "sietch",
+    "hawat",
+    "duncan",
+    "arrakeen",
+    "sandworm",
 ]
 
-def main():
+def cli_parse():
+    # CLI
     parser = argparse.ArgumentParser(
         prog='client.py'
     )
@@ -26,7 +50,10 @@ def main():
     parser.add_argument('-d', '--document', help='ID of the document to search')
     parser.add_argument('-k', '--keyword', help='keyword to search for')
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+def main():
+    args = cli_parse()
 
     time.sleep(2)
     try:

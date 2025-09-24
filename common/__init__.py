@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod, update_abstractmethods
+from sys import stderr
 import time
 from typing import TypedDict
 import inspect
@@ -27,7 +28,7 @@ def build_proxy_fn(fname: str):
         value = fn(*args, **kwargs)
         t2 = time.process_time_ns() / 1000000
         diff = t2 - t1
-        print(f"[RPYC] '{fname}' took {diff:0.2} ms")
+        print(f"[RPYC] '{fname}' took {diff:0.2} ms", file=stderr)
         return value
     return inner
 
