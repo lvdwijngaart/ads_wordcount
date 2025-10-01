@@ -1,46 +1,28 @@
+include:
+  - clients.yml
+  - servers.yml
 services:
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
 
-  server:
-    build:
-      context: ./server
-      additional_contexts:
-        common: ./common
-    volumes:
-      - ./server/data:/data:ro
-    environment:
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_TTL_SECONDS: "86400" # cache for 1 day
-      RPYC_PORT: "18861"
-      DOCS_DIR: "/data"
-    depends_on:
-      - redis
-    ports:
-      - 18900:18861
-
   load-balancer:
     build: ./load-balancer
-    environment:
-      RPYC_SERVERS: "server:18861"
-    ports:
-      - 18861:18861
-
-  # Mock client to create artificial server load
-  client-mock:
-    build:
-      context: ./client
-      additional_contexts:
-        common: ./common
     depends_on:
-      server:
+      server-01:
+        condition: service_healthy
+      server-02:
+        condition: service_healthy
+      server-03:
         condition: service_healthy
     environment:
-      RPYC_HOST: "load-balancer"
-      RPYC_PORT: "18861"
+      RPYC_SERVERS: |
+        server-01:18861
+        server-02:18861
+        server-03:18861
+    ports:
+      - 18861:18861
 
   # Interactive client to attach to
   client-interactive:
@@ -48,8 +30,6 @@ services:
       context: ./client
       additional_contexts:
         common: ./common
-    depends_on:
-      - server
     environment:
       RPYC_HOST: "load-balancer"
       RPYC_PORT: "18861"

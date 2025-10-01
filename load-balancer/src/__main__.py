@@ -6,12 +6,19 @@ RPYC_SERVERS = [
     addr.split(":")
     for addr in os.environ.get("RPYC_SERVERS", "localhost:18900").splitlines()
 ]
+
+RPYC_SERVER_COUNT = len(RPYC_SERVERS)
 SERVER_HOST = os.environ.get("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "18861"))
 
+rr_counter = 0
+
 
 async def select_server() -> tuple[StreamReader, StreamWriter]:
-    hostname, port = RPYC_SERVERS[0]
+    global rr_counter
+    hostname, port = RPYC_SERVERS[rr_counter]
+    rr_counter = (rr_counter + 1) % RPYC_SERVER_COUNT
+    print(f"selecting server '{hostname}:{port}'")
     return await asyncio.open_connection(hostname, int(port))
 
 
