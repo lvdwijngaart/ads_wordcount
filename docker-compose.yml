@@ -20,7 +20,15 @@ services:
     depends_on:
       - redis
     ports:
-      - "18861:18861"
+      - 18900:18861
+
+  load-balancer:
+    build: ./load-balancer
+    environment:
+      RPYC_SERVERS: "server:18861"
+    ports:
+      - 18861:18861
+
   # Mock client to create artificial server load
   client-mock:
     build:
@@ -31,7 +39,7 @@ services:
       server:
         condition: service_healthy
     environment:
-      RPYC_HOST: "server"
+      RPYC_HOST: "load-balancer"
       RPYC_PORT: "18861"
 
   # Interactive client to attach to
@@ -43,6 +51,6 @@ services:
     depends_on:
       - server
     environment:
-      RPYC_HOST: "server-1"
+      RPYC_HOST: "load-balancer"
       RPYC_PORT: "18861"
     entrypoint: ["sleep", "infinity"]
