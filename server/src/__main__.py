@@ -27,9 +27,8 @@ def read_document(doc_id: str) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
-def cache_key(doc_id: str, text: str) -> str:
-    h = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return f"wc:{doc_id}:{h}"
+def cache_key(doc: str, keyword: str) -> str:
+    return f"wc:{doc}:{hash(keyword):x}"
 
 @rpyc.service
 class WordCountService(rpyc.Service, WordCountInterface):
@@ -44,27 +43,35 @@ class WordCountService(rpyc.Service, WordCountInterface):
         Returns {"count": int, "cached": bool}
         Caches by hashing the input text.
         """
+        # matching is case insensitive, so we turn everthing lowercase to improve caching
+        keyword = keyword.lower()
         key = cache_key(doc, keyword)
+
         cached_val = rd.get(key)
         if cached_val is not None:
             try:
-                return {"doc": doc, "keyword": keyword, "count": int(cached_val.decode("utf-8")), "cached": True}
-            except Exception:
-                # Fall through to recompute if parsing fails
+                count = int(cached_val.decode("utf-8"))
+                return {"doc": doc, "keyword": keyword, "count": count, "cached": True}
+            except:
+                # decoding/parsing error is treated as cache miss
                 pass
+
+        # cache miss: recompute
         text = read_document(doc)
 
-        # Count occurrences
+        # Count occurrences. keyword is wrapped with word-boundary groups
         pattern = rf"\b{re.escape(keyword)}\b"
         count = len(re.findall(pattern, text, flags=re.IGNORECASE))
 
-        # Cache as plain integer string with TTL
+        # write-back to cache
         rd.set(key, str(count), ex=REDIS_TTL)
         return {"doc": doc, "keyword": keyword, "count": count, "cached": False}
 
 if __name__ == "__main__":
     print(f"Connecting to Redis at {REDIS_HOST}:{REDIS_PORT} ...")
     rd = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0)
+
+    # verify connection
     try:
         rd.ping()
         print("Redis connection OK.")

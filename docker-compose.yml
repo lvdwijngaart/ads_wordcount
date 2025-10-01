@@ -10,7 +10,7 @@ services:
       additional_contexts:
         common: ./common
     volumes:
-      - ./server/data:/data
+      - ./server/data:/data:ro
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -28,7 +28,8 @@ services:
       additional_contexts:
         common: ./common
     depends_on:
-      - server
+      server:
+        condition: service_healthy
     environment:
       RPYC_HOST: "server"
       RPYC_PORT: "18861"
@@ -44,4 +45,4 @@ services:
     environment:
       RPYC_HOST: "server-1"
       RPYC_PORT: "18861"
-    entrypoint: ["tail", "-f", "/dev/null"]
+    entrypoint: ["sleep", "infinity"]

@@ -1,4 +1,6 @@
-# pyright: reportAbstractUsage=false
+# Pyright cannot interpret our auto-implementation of WordCountProxy since this is done at runtime.
+# The comment below disables the error it would report otherwise.
+#pyright: reportAbstractUsage=false
 
 import os
 import sys
@@ -9,10 +11,13 @@ import random
 
 from common import WordCountProxy
 
+# Envvars
 RPYC_HOST = os.environ.get("RPYC_HOST", "localhost")
 RPYC_PORT = int(os.environ.get("RPYC_PORT", "18861"))
 MOCK_SEND_INTERVAL = int(os.environ.get("MOCK_SEND_INTERVAL", "1000"))
 
+
+# List of keywords to choose from in mock mode. Currently tailored to `dune.txt`
 keyword_list = [
     "paul",
     "duke",
@@ -41,7 +46,9 @@ keyword_list = [
 ]
 
 def cli_parse():
-    # CLI
+    """
+    Defines and parses command-line arguments
+    """
     parser = argparse.ArgumentParser(
         prog='client.py'
     )
@@ -55,7 +62,7 @@ def cli_parse():
 def main():
     args = cli_parse()
 
-    time.sleep(2)
+    # connect with server
     try:
         conn = rpyc.connect(RPYC_HOST, RPYC_PORT)
         svc = WordCountProxy(conn.root)
@@ -69,25 +76,29 @@ def main():
         for d in docs:
             print(d)
     elif args.mock:
-        print("Running mock")
+        # Run in mock mode
         mock_loop(svc)
     else:
-        doc, keyword = args.document, args.keyword
-
-        if not doc:
+        # single request (interactive)
+        if not args.document:
             print("No document specified")
             exit(1)
-        if not keyword:
+        if not args.keyword:
             print("No keyword specified")
             exit(1)
 
-        res = svc.count_words(doc, keyword)
+        res = svc.count_words(args.document, args.keyword)
         print(f"Word count: {res['count']} (cached={res['cached']})")
 
 def mock_loop(svc: WordCountProxy):
+    """
+    Repeatedly send random requests to the server.
+    """
+    # get a list of documents to choose from
     docs = svc.list_docs()
 
     while 1:
+        # pick a random document + keyword, and send a request.
         doc = random.choice(docs)
         keyword = random.choice(keyword_list)
         result = svc.count_words(doc, keyword)
