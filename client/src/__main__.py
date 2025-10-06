@@ -1,6 +1,6 @@
 # Pyright cannot interpret our auto-implementation of WordCountProxy since this is done at runtime.
 # The comment below disables the error it would report otherwise.
-#pyright: reportAbstractUsage=false
+# pyright: reportAbstractUsage=false
 
 import os
 import sys
@@ -45,19 +45,25 @@ keyword_list = [
     "sandworm",
 ]
 
+
 def cli_parse():
     """
     Defines and parses command-line arguments
     """
-    parser = argparse.ArgumentParser(
-        prog='client.py'
+    parser = argparse.ArgumentParser(prog="client.py")
+    parser.add_argument(
+        "--mock",
+        action="store_true",
+        help="Run a mock client that repeatedly does random requests",
     )
-    parser.add_argument('--mock', action='store_true', help='Run a mock client that repeatedly does random requests')
-    parser.add_argument('-l', '--list-docs', action='store_true', help='Get a list of documents')
-    parser.add_argument('-d', '--document', help='ID of the document to search')
-    parser.add_argument('-k', '--keyword', help='keyword to search for')
+    parser.add_argument(
+        "-l", "--list-docs", action="store_true", help="Get a list of documents"
+    )
+    parser.add_argument("-d", "--document", help="ID of the document to search")
+    parser.add_argument("-k", "--keyword", help="keyword to search for")
 
     return parser.parse_args()
+
 
 def main():
     args = cli_parse()
@@ -90,6 +96,7 @@ def main():
         res = svc.count_words(args.document, args.keyword)
         print(f"Word count: {res['count']} (cached={res['cached']})")
 
+
 def mock_loop(svc: WordCountProxy):
     """
     Repeatedly send random requests to the server.
@@ -105,6 +112,7 @@ def mock_loop(svc: WordCountProxy):
 
         print(result)
         time.sleep(MOCK_SEND_INTERVAL / 1000)
+
 
 if __name__ == "__main__":
     main()

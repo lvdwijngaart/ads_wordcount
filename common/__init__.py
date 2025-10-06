@@ -4,11 +4,13 @@ import time
 from typing import TypedDict
 import inspect
 
+
 class CountWordsResponse(TypedDict):
     doc: str
     keyword: str
     count: int
     cached: bool
+
 
 class WordCountInterface(ABC):
     """
@@ -16,6 +18,7 @@ class WordCountInterface(ABC):
 
     `WordCountProxy` auto-implements this interface at runtime.
     """
+
     @abstractmethod
     def count_words(self, doc: str, keyword: str) -> CountWordsResponse:
         """
@@ -30,9 +33,11 @@ class WordCountInterface(ABC):
         """
         pass
 
+
 # --- Proxy auto-implementation:
 # A Proxy is an implementation of an RPC interface by simply performing the corresponding RPC
 # calls. Since implementation is trivial we can auto-generate this with some python magic.
+
 
 # Function generator for proxy methods. Takes the function name and returns a function
 # that performs the corresponding RPC call.
@@ -47,11 +52,14 @@ def build_proxy_fn(fname: str):
         diff = t2 - t1
         print(f"[RPYC] '{fname}' took {diff:0.2} ms", file=stderr)
         return value
+
     return inner
+
 
 class WordCountProxy(WordCountInterface):
     def __init__(self, conn):
         self.conn = conn
+
 
 # Auto-implementation
 for fn in WordCountInterface.__abstractmethods__:
