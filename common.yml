@@ -1,0 +1,27 @@
+services:
+  server:
+    build:
+      context: ./server
+      additional_contexts:
+        common: ./common
+    volumes:
+      - ./server/data:/data:ro
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_TTL_SECONDS: "86400" # cache for 1 day
+      RPYC_PORT: "18861"
+      DOCS_DIR: "/data"
+    depends_on:
+      - redis
+
+  client-mock:
+    build:
+      context: ./client
+      additional_contexts:
+        common: ./common
+    depends_on:
+      - load-balancer
+    environment:
+      RPYC_HOST: "load-balancer"
+      RPYC_PORT: "18861"

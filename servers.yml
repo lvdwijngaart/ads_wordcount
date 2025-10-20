@@ -1,0 +1,18 @@
+services:
+  server-01:
+    container_name: server-01
+    extends:
+      file: common.yml
+      service: server
+
+  server-02:
+    container_name: server-02
+    extends:
+      file: common.yml
+      service: server
+
+  server-03:
+    container_name: server-03
+    extends:
+      file: common.yml
+      service: server

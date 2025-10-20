@@ -1,0 +1,6 @@
+services:
+  client-mock:
+    scale: 50
+    extends:
+      file: common.yml
+      service: client-mock
