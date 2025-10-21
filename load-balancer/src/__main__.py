@@ -22,28 +22,29 @@ async def select_server() -> tuple[StreamReader, StreamWriter]:
     return await asyncio.open_connection(hostname, int(port))
 
 
-async def forward_stream(rx, wx):
-    while not (wx.is_closing()):
-        data_up = await rx.read(128)
+async def forward_stream(rx: StreamReader, wx: StreamWriter):
+    while not rx.at_eof():
+        data_up = await rx.read(256)
         wx.write(data_up)
         await wx.drain()
 
 
 async def handle_conn(rc: StreamReader, wc: StreamWriter):
+    print(f"incoming connection {wc}")
     rs, ws = await select_server()
 
-    try:
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(forward_stream(rc, ws))  # upstream
-            tg.create_task(forward_stream(rs, wc))  # downstream
+    upstream = asyncio.create_task(forward_stream(rc, ws))
+    downstream = asyncio.create_task(forward_stream(rs, wc))
 
+    try:
+        await asyncio.gather(upstream, downstream)
     except Exception as e:
         print(e)
+        upstream.cancel()
+        downstream.cancel()
     finally:
-        ws.close()
         wc.close()
-        await ws.wait_closed()
-        await wc.wait_closed()
+        ws.close()
 
 
 async def main():
