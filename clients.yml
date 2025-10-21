@@ -4,3 +4,5 @@ services:
     extends:
       file: common.yml
       service: client-mock
+    volumes:
+      - ./shared_output:/shared  # ALL clients share this host folder

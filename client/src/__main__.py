@@ -8,6 +8,7 @@ import rpyc
 import argparse
 import time
 import random
+import fcntl
 
 from common import WordCountProxy
 
@@ -103,15 +104,34 @@ def mock_loop(svc: WordCountProxy):
     """
     # get a list of documents to choose from
     docs = svc.list_docs()
-
-    while 1:
+    i = 0
+    latencies = []
+    client_id = os.getpid()  # unique identifier per container
+    while i<20:
         # pick a random document + keyword, and send a request.
         doc = random.choice(docs)
         keyword = random.choice(keyword_list)
+        starttime = time.time()
         result = svc.count_words(doc, keyword)
-
+        latency = (time.time() - starttime) * 1000  # in ms
+        latencies.append(latency)
         print(result)
+        i+=1
         time.sleep(MOCK_SEND_INTERVAL / 1000)
+    # Write to shared file with lock
+    shared_file = "/shared/latencies.txt"
+    os.makedirs(os.path.dirname(shared_file), exist_ok=True)
+    
+    with open(shared_file, "a") as f:  # append mode
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)  # exclusive lock
+        for lat in latencies:
+            f.write(f"{lat}\n")
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)  # unlock
+    
+    print(f"Client {client_id} wrote {len(latencies)} latencies to {shared_file}")
+    
+    while True:
+        time.sleep(3600)
 
 
 if __name__ == "__main__":
