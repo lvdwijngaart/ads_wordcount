@@ -94,6 +94,9 @@ if __name__ == "__main__":
     t = ThreadedServer(
         WordCountService,
         port=RPYC_PORT,
-        protocol_config={"allow_public_attrs": True},
+        protocol_config={
+            "allow_public_attrs": True, 
+            "allow_pickle": True
+            },
     )
     t.start()

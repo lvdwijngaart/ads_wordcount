@@ -71,24 +71,25 @@ def make_request_timed(doc: str, keyword: str):
     """
     try:
         # increase sync timeout so the remote result won't "expire" for slow responses
-        conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 30})
+        conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 60})
         svc = WordCountProxy(conn.root)
     except Exception as e:
         print(f"Couldn't connect to server: {e}")
         return None, None
 
-    t0 = time.perf_counter()
     try:
+        t0 = time.perf_counter()
         remote_result = svc.count_words(doc, keyword)
+        t1 = time.perf_counter()
+        elapsed_ms = (t1 - t0) * 1000
         # materialize the remote result while the connection is open
         try:
             result = obtain(remote_result)
-        except Exception:
-            # fallback if obtain fails (remote_result may already be a plain value)
-            result = remote_result
+        except Exception as e:
+            # if obtain fails, surface the error and treat the request as failed
+            print(f"Failed to obtain remote result: {e}")
+            return None, None
     finally:
-        t1 = time.perf_counter()
-        elapsed_ms = (t1 - t0) * 1000
         try:
             conn.close()
         except Exception:
@@ -125,7 +126,7 @@ def main():
 def get_docs(): 
   # connect with server
   try:
-    conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 30})
+    conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 60})
     svc = WordCountProxy(conn.root)
     docs_remote = svc.list_docs()
     # materialize remote sequence locally while the connection is open
