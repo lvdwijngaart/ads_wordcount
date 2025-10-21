@@ -23,27 +23,69 @@ async def select_server() -> tuple[StreamReader, StreamWriter]:
 
 
 async def forward_stream(rx, wx):
-    while not (wx.is_closing()):
-        data_up = await rx.read(128)
-        wx.write(data_up)
-        await wx.drain()
+    """
+    Read from rx and forward to wx. Break on EOF and flush writes.
+    """
+    try:
+        while True:
+            data = await rx.read(4096)
+            if not data:
+                # peer closed; try to signal EOF to the writer side
+                try:
+                    wx.write_eof()
+                except Exception:
+                    pass
+                await wx.drain()
+                break
+            wx.write(data)
+            await wx.drain()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        # ignore forward errors; caller will close sockets
+        pass
 
 
 async def handle_conn(rc: StreamReader, wc: StreamWriter):
-    rs, ws = await select_server()
-
+    """
+    Accept a client connection, pick a backend, open backend connection
+    and forward bytes in both directions until EOF / error.
+    """
+    rs = ws = None
     try:
+        rs, ws = await select_server()
+
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(forward_stream(rc, ws))  # upstream
-            tg.create_task(forward_stream(rs, wc))  # downstream
+            tg.create_task(forward_stream(rc, ws))  # client -> backend
+            tg.create_task(forward_stream(rs, wc))  # backend -> client
 
     except Exception as e:
-        print(e)
+        # keep message short for logs
+        print("connection error:", e)
     finally:
-        ws.close()
-        wc.close()
-        await ws.wait_closed()
-        await wc.wait_closed()
+        # ensure all sockets are closed
+        try:
+            if ws is not None:
+                ws.close()
+                await ws.wait_closed()
+        except Exception:
+            pass
+        try:
+            if wc is not None:
+                wc.close()
+                await wc.wait_closed()
+        except Exception:
+            pass
+        try:
+            if rc is not None:
+                rc.feed_eof()
+        except Exception:
+            pass
+        try:
+            if rs is not None:
+                rs.feed_eof()
+        except Exception:
+            pass
 
 
 async def main():

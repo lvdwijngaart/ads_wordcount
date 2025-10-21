@@ -5,6 +5,7 @@
 import os
 import sys
 import rpyc
+from rpyc.utils.classic import obtain
 import argparse
 import time
 import random
@@ -65,45 +66,88 @@ def cli_parse():
 
     return parser.parse_args()
 
+def make_request_timed(doc: str, keyword: str):
+    """
+    Open a new rpyc connection for this single request, time it and close it.
+    """
+    try:
+        # increase sync timeout so the remote result won't "expire" for slow responses
+        conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 60})
+        svc = WordCountProxy(conn.root)
+    except Exception as e:
+        print(f"Couldn't connect to server: {e}")
+        return None, None
+
+    try:
+        t0 = time.perf_counter()
+        remote_result = svc.count_words(doc, keyword)
+        t1 = time.perf_counter()
+        elapsed_ms = (t1 - t0) * 1000
+        # materialize the remote result while the connection is open
+        try:
+            result = obtain(remote_result)
+        except Exception as e:
+            # if obtain fails, surface the error and treat the request as failed
+            print(f"Failed to obtain remote result: {e}")
+            return None, None
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return result, elapsed_ms
 
 def main():
     args = cli_parse()
 
-    # connect with server
-    try:
-        conn = rpyc.connect(RPYC_HOST, RPYC_PORT)
-        svc = WordCountProxy(conn.root)
-    except Exception as e:
-        print(f"Couldn't connect to server: {e}")
-        exit(1)
-
     if args.list_docs:
-        print("Available documents:")
-        docs = svc.list_docs()
-        for d in docs:
-            print(d)
+      docs = get_docs()
+      print("Available documents: ")
+      for d in docs:
+        print(d)
     elif args.mock:
-        # Run in mock mode
-        mock_loop(svc)
+      # Run in mock mode
+      mock_loop()
     else:
-        # single request (interactive)
-        if not args.document:
-            print("No document specified")
-            exit(1)
-        if not args.keyword:
-            print("No keyword specified")
-            exit(1)
+      # single request (interactive)
+      if not args.document:
+        print("No document specified")
+        exit(1)
+      if not args.keyword:
+        print("No keyword specified")
+        exit(1)
+      
+      res, _ = make_request_timed(args.document, args.keyword)
+      if res is None: 
+        exit(1)
+      print(f"Word count: {res['count']} (cached={res['cached']})")
 
-        res = svc.count_words(args.document, args.keyword)
-        print(f"Word count: {res['count']} (cached={res['cached']})")
 
+def get_docs(): 
+  # connect with server
+  try:
+    conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 60})
+    svc = WordCountProxy(conn.root)
+    docs_remote = svc.list_docs()
+    # materialize remote sequence locally while the connection is open
+    try:
+        docs = obtain(docs_remote)
+    except Exception:
+        docs = list(docs_remote)
+    conn.close()
+  except Exception as e:
+    print(f"Couldn't connect to server: {e}")
+    exit(1)
 
-def mock_loop(svc: WordCountProxy):
+  return docs
+
+def mock_loop():
     """
     Repeatedly send random requests to the server.
     """
     # get a list of documents to choose from
-    docs = svc.list_docs()
+    docs = get_docs()
     i = 0
     latencies = []
     client_id = os.getpid()  # unique identifier per container
@@ -111,11 +155,11 @@ def mock_loop(svc: WordCountProxy):
         # pick a random document + keyword, and send a request.
         doc = random.choice(docs)
         keyword = random.choice(keyword_list)
-        starttime = time.time()
-        result = svc.count_words(doc, keyword)
-        latency = (time.time() - starttime) * 1000  # in ms
-        latencies.append(latency)
+        result, elapsed_ms = make_request_timed(doc, keyword)
+        
+        print(f"request #{i+1}: elapsed={elapsed_ms:.3f} ms")
         print(result)
+        latencies.append(elapsed_ms)
         i+=1
         time.sleep(MOCK_SEND_INTERVAL / 1000)
     # Write to shared file with lock
