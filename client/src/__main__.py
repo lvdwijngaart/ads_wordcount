@@ -65,27 +65,34 @@ def cli_parse():
 
     return parser.parse_args()
 
-def make_request_timed(svc: WordCountProxy, doc: str, keyword: str): 
+def make_request_timed(doc: str, keyword: str):
     """
-    Open a new rpyc connection for this single request, time it and close it
+    Open a new rpyc connection for this single request, time it and close it.
     """
-    try: 
-      conn = rpyc.connect(RPYC_HOST, RPYC_PORT)
-      svc = WordCountProxy(conn.root)
+    try:
+        # increase sync timeout so the remote result won't "expire" for slow responses
+        conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 30})
+        svc = WordCountProxy(conn.root)
     except Exception as e:
-      print(f"Couldn't connect to server: {e}")
-      return None, None
-    
+        print(f"Couldn't connect to server: {e}")
+        return None, None
+
     t0 = time.perf_counter()
-    try: 
-      result = svc.count_words(doc, keyword)
-    finally: 
-      t1 = time.perf_counter()
-      elapsed_ms = (t1 - t0) * 1000
-      try: 
-        conn.close()
-      except Exception: 
-        pass
+    try:
+        remote_result = svc.count_words(doc, keyword)
+        # materialize the remote result while the connection is open
+        try:
+            result = obtain(remote_result)
+        except Exception:
+            # fallback if obtain fails (remote_result may already be a plain value)
+            result = remote_result
+    finally:
+        t1 = time.perf_counter()
+        elapsed_ms = (t1 - t0) * 1000
+        try:
+            conn.close()
+        except Exception:
+            pass
 
     return result, elapsed_ms
 
@@ -147,7 +154,7 @@ def mock_loop():
       # pick a random document + keyword, and send a request.
       doc = random.choice(docs)
       keyword = random.choice(keyword_list)
-      result, elapsed_ms = make_request_timed(svc, doc, keyword)
+      result, elapsed_ms = make_request_timed(doc, keyword)
       if result is None: 
         print("request failed")
       else: 
