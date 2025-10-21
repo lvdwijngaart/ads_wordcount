@@ -5,6 +5,7 @@
 import os
 import sys
 import rpyc
+from rpyc.utils.classic import obtain
 import argparse
 import time
 import random
@@ -64,54 +65,96 @@ def cli_parse():
 
     return parser.parse_args()
 
+def make_request_timed(svc: WordCountProxy, doc: str, keyword: str): 
+    """
+    Open a new rpyc connection for this single request, time it and close it
+    """
+    try: 
+      conn = rpyc.connect(RPYC_HOST, RPYC_PORT)
+      svc = WordCountProxy(conn.root)
+    except Exception as e:
+      print(f"Couldn't connect to server: {e}")
+      return None, None
+    
+    t0 = time.perf_counter()
+    try: 
+      result = svc.count_words(doc, keyword)
+    finally: 
+      t1 = time.perf_counter()
+      elapsed_ms = (t1 - t0) * 1000
+      try: 
+        conn.close()
+      except Exception: 
+        pass
+
+    return result, elapsed_ms
 
 def main():
     args = cli_parse()
 
-    # connect with server
-    try:
-        conn = rpyc.connect(RPYC_HOST, RPYC_PORT)
-        svc = WordCountProxy(conn.root)
-    except Exception as e:
-        print(f"Couldn't connect to server: {e}")
-        exit(1)
-
     if args.list_docs:
-        print("Available documents:")
-        docs = svc.list_docs()
-        for d in docs:
-            print(d)
+      docs = get_docs()
+      print("Available documents: ")
+      for d in docs:
+        print(d)
     elif args.mock:
-        # Run in mock mode
-        mock_loop(svc)
+      # Run in mock mode
+      mock_loop()
     else:
-        # single request (interactive)
-        if not args.document:
-            print("No document specified")
-            exit(1)
-        if not args.keyword:
-            print("No keyword specified")
-            exit(1)
+      # single request (interactive)
+      if not args.document:
+        print("No document specified")
+        exit(1)
+      if not args.keyword:
+        print("No keyword specified")
+        exit(1)
+      
+      res, _ = make_request_timed(args.document, args.keyword)
+      if res is None: 
+        exit(1)
+      print(f"Word count: {res['count']} (cached={res['cached']})")
 
-        res = svc.count_words(args.document, args.keyword)
-        print(f"Word count: {res['count']} (cached={res['cached']})")
 
+def get_docs(): 
+  # connect with server
+  try:
+    conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 30})
+    svc = WordCountProxy(conn.root)
+    docs_remote = svc.list_docs()
+    # materialize remote sequence locally while the connection is open
+    try:
+        docs = obtain(docs_remote)
+    except Exception:
+        docs = list(docs_remote)
+    conn.close()
+  except Exception as e:
+    print(f"Couldn't connect to server: {e}")
+    exit(1)
 
-def mock_loop(svc: WordCountProxy):
+  return docs
+
+def mock_loop():
     """
     Repeatedly send random requests to the server.
     """
     # get a list of documents to choose from
-    docs = svc.list_docs()
+    # connect with server
+    docs = get_docs()
 
-    while 1:
-        # pick a random document + keyword, and send a request.
-        doc = random.choice(docs)
-        keyword = random.choice(keyword_list)
-        result = svc.count_words(doc, keyword)
-
+    i = 0
+    while True:
+      i += 1
+      # pick a random document + keyword, and send a request.
+      doc = random.choice(docs)
+      keyword = random.choice(keyword_list)
+      result, elapsed_ms = make_request_timed(svc, doc, keyword)
+      if result is None: 
+        print("request failed")
+      else: 
+        print(f"request #{i+1}: elapsed={elapsed_ms:.3f} ms")
         print(result)
-        time.sleep(MOCK_SEND_INTERVAL / 1000)
+
+      time.sleep(MOCK_SEND_INTERVAL / 1000)
 
 
 if __name__ == "__main__":
