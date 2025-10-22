@@ -12,7 +12,7 @@ SERVER_HOST = os.environ.get("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "18861"))
 
 # 5 second interval for polling servers for their health status
-HEALTHCHECK_INTERVAL = int(os.environ.get("HEALTHCHECK_INTERVAL", "5"))
+HEALTHCHECK_INTERVAL = int(os.environ.get("HEALTHCHECK_INTERVAL", "3"))
 
 conn_counts = [0] * RPYC_SERVER_COUNT
 server_health = [True] * RPYC_SERVER_COUNT
