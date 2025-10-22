@@ -6,6 +6,7 @@ import os
 import sys
 import rpyc
 from rpyc.utils.classic import obtain
+import datetime
 import argparse
 import time
 import random
@@ -17,7 +18,6 @@ from common import WordCountProxy
 RPYC_HOST = os.environ.get("RPYC_HOST", "localhost")
 RPYC_PORT = int(os.environ.get("RPYC_PORT", "18861"))
 MOCK_SEND_INTERVAL = int(os.environ.get("MOCK_SEND_INTERVAL", "100"))
-
 
 # List of keywords to choose from in mock mode. Currently tailored to `dune.txt`
 keyword_list = [
@@ -66,13 +66,16 @@ def cli_parse():
 
     return parser.parse_args()
 
+
 def make_request_timed(doc: str, keyword: str):
     """
     Open a new rpyc connection for this single request, time it and close it.
     """
     try:
         # increase sync timeout so the remote result won't "expire" for slow responses
-        conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 60})
+        conn = rpyc.connect(
+            RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 60}
+        )
         svc = WordCountProxy(conn.root)
     except Exception as e:
         print(f"Couldn't connect to server: {e}")
@@ -97,49 +100,53 @@ def make_request_timed(doc: str, keyword: str):
 
     return result, elapsed_ms
 
+
 def main():
     args = cli_parse()
 
     if args.list_docs:
-      docs = get_docs()
-      print("Available documents: ")
-      for d in docs:
-        print(d)
+        docs = get_docs()
+        print("Available documents: ")
+        for d in docs:
+            print(d)
     elif args.mock:
-      # Run in mock mode
-      mock_loop()
+        # Run in mock mode
+        mock_loop()
     else:
-      # single request (interactive)
-      if not args.document:
-        print("No document specified")
-        exit(1)
-      if not args.keyword:
-        print("No keyword specified")
-        exit(1)
-      
-      res, _ = make_request_timed(args.document, args.keyword)
-      if res is None: 
-        exit(1)
-      print(f"Word count: {res['count']} (cached={res['cached']})")
+        # single request (interactive)
+        if not args.document:
+            print("No document specified")
+            exit(1)
+        if not args.keyword:
+            print("No keyword specified")
+            exit(1)
+
+        res, _ = make_request_timed(args.document, args.keyword)
+        if res is None:
+            exit(1)
+        print(f"Word count: {res['count']} (cached={res['cached']})")
 
 
-def get_docs(): 
-  # connect with server
-  try:
-    conn = rpyc.connect(RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 60})
-    svc = WordCountProxy(conn.root)
-    docs_remote = svc.list_docs()
-    # materialize remote sequence locally while the connection is open
+def get_docs():
+    # connect with server
     try:
-        docs = obtain(docs_remote)
-    except Exception:
-        docs = list(docs_remote)
-    conn.close()
-  except Exception as e:
-    print(f"Couldn't connect to server: {e}")
-    exit(1)
+        conn = rpyc.connect(
+            RPYC_HOST, RPYC_PORT, config={"sync_request_timeout": 60}
+        )
+        svc = WordCountProxy(conn.root)
+        docs_remote = svc.list_docs()
+        # materialize remote sequence locally while the connection is open
+        try:
+            docs = obtain(docs_remote)
+        except Exception:
+            docs = list(docs_remote)
+        conn.close()
+    except Exception as e:
+        print(f"Couldn't connect to server: {e}")
+        exit(1)
 
-  return docs
+    return docs
+
 
 def mock_loop():
     """
@@ -166,15 +173,17 @@ def mock_loop():
     # Write to shared file with lock
     shared_file = "/shared/latencies.txt"
     os.makedirs(os.path.dirname(shared_file), exist_ok=True)
-    
+
     with open(shared_file, "a") as f:  # append mode
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)  # exclusive lock
-        for lat in latencies:
-            f.write(f"{lat}\n")
+        for stamp, lat in latencies:
+            f.write(f"{stamp},{lat}\n")
         fcntl.flock(f.fileno(), fcntl.LOCK_UN)  # unlock
-    
-    print(f"Client {client_id} wrote {len(latencies)} latencies to {shared_file}")
-    
+
+    print(
+        f"Client {client_id} wrote {len(latencies)} latencies to {shared_file}"
+    )
+
     while True:
         time.sleep(3600)
 
