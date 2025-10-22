@@ -21,6 +21,7 @@ services:
         server-01:18861
         server-02:18861
         server-03:18861
+      LB_METHOD: ${LB_METHOD:-round-robin}
     ports:
       - 18861:18861
 

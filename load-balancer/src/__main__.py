@@ -10,6 +10,7 @@ RPYC_SERVERS = [
 RPYC_SERVER_COUNT = len(RPYC_SERVERS)
 SERVER_HOST = os.environ.get("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "18861"))
+LB_METHOD = os.environ.get("LB_METHOD", "round-robin")
 
 # 5 second interval for polling servers for their health status
 HEALTHCHECK_INTERVAL = int(os.environ.get("HEALTHCHECK_INTERVAL", "3"))
@@ -40,7 +41,7 @@ async def health_check():
                 server_health[i] = False
         await asyncio.sleep(HEALTHCHECK_INTERVAL)
 
-async def select_server(attempt=1) -> tuple[StreamReader, StreamWriter]:
+async def select_server_least_conn() -> tuple[int, StreamReader, StreamWriter]:
     """Load balancing algorithm -> Least connections algorithm"""
     async with select_lock:
         # choose from healthy servers only
@@ -62,6 +63,20 @@ async def select_server(attempt=1) -> tuple[StreamReader, StreamWriter]:
             print(f"[HEALTH] Servers Health: {server_health}")
         # Raise a clear error upward so handle_conn() can log it
         raise ConnectionError(f"Failed to connect to {hostname}:{port}: {e}")
+
+rr_counter = 0
+
+
+async def select_server_round_robin() -> tuple[int, StreamReader, StreamWriter]:
+    global rr_counter
+    async with select_lock:
+        rr_counter += 1
+        idx = rr_counter
+    hostname, port = RPYC_SERVERS[idx]
+    print(f"selecting server '{hostname}:{port}'")
+    reader, writer = await asyncio.open_connection(hostname, int(port))
+    return idx, reader, writer
+
 
 async def forward_stream(rx, wx):
     """
@@ -95,7 +110,13 @@ async def handle_conn(rc: StreamReader, wc: StreamWriter):
     rs = ws = None
     idx: int | None = None
     try:
-        idx, rs, ws = await select_server()
+        match LB_METHOD:
+            case "round-robin":
+                idx, rs, ws = await select_server_round_robin()
+            case "least-conn":
+                idx, rs, ws = await select_server_least_conn()
+            case _:
+                raise NotImplementedError
 
         async with asyncio.TaskGroup() as tg:
             tg.create_task(forward_stream(rc, ws))  # client -> backend
@@ -138,6 +159,7 @@ async def main():
     asyncio.create_task(health_check())
     server = await asyncio.start_server(handle_conn, SERVER_HOST, SERVER_PORT)
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
+    print(f"Using load balancer algorithm '{LB_METHOD}'")
     print(f"Serving on {addrs}")
 
     async with server:
