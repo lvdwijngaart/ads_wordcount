@@ -4,12 +4,12 @@ filepath = "shared_output/latencies.txt"
 # Read all lines
 with open(filepath, "r") as f:
     lines = f.readlines()
-data  = list(  [[] for _ in range(20)]  )  # 20 clients
+data  = list(  [[] for _ in range(100)]  )  # 20 clients
 
 for idx, line in enumerate(lines):
 
     latency = float(line.strip())
-    data[idx % 20].append(latency)
+    data[idx % 100].append(latency)
 
 
 averages = [sum(client_data) / len(client_data) if client_data else 0 for client_data in data]

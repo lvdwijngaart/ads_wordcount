@@ -16,7 +16,7 @@ from common import WordCountProxy
 # Envvars
 RPYC_HOST = os.environ.get("RPYC_HOST", "localhost")
 RPYC_PORT = int(os.environ.get("RPYC_PORT", "18861"))
-MOCK_SEND_INTERVAL = int(os.environ.get("MOCK_SEND_INTERVAL", "200"))
+MOCK_SEND_INTERVAL = int(os.environ.get("MOCK_SEND_INTERVAL", "100"))
 
 
 # List of keywords to choose from in mock mode. Currently tailored to `dune.txt`
@@ -159,7 +159,6 @@ def mock_loop():
           print(f"Request failed for {doc} / {keyword}")
         else:
           latencies.append(elapsed_ms)
-        latencies.append(elapsed_ms)
         i+=1
         time.sleep(MOCK_SEND_INTERVAL / 1000)
 
