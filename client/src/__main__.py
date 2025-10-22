@@ -161,11 +161,12 @@ def mock_loop():
         # pick a random document + keyword, and send a request.
         doc = random.choice(docs)
         keyword = random.choice(keyword_list)
+        timestamp = datetime.datetime.now().isoformat()
         result, elapsed_ms = make_request_timed(doc, keyword)
         if elapsed_ms is None:
           print(f"Request failed for {doc} / {keyword}")
         else:
-          latencies.append(elapsed_ms)
+          latencies.append((timestamp, elapsed_ms))
         i+=1
         time.sleep(MOCK_SEND_INTERVAL / 1000)
 
