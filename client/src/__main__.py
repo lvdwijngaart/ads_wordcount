@@ -16,7 +16,7 @@ from common import WordCountProxy
 # Envvars
 RPYC_HOST = os.environ.get("RPYC_HOST", "localhost")
 RPYC_PORT = int(os.environ.get("RPYC_PORT", "18861"))
-MOCK_SEND_INTERVAL = int(os.environ.get("MOCK_SEND_INTERVAL", "1000"))
+MOCK_SEND_INTERVAL = int(os.environ.get("MOCK_SEND_INTERVAL", "200"))
 
 
 # List of keywords to choose from in mock mode. Currently tailored to `dune.txt`
@@ -84,12 +84,11 @@ def make_request_timed(doc: str, keyword: str):
         t1 = time.perf_counter()
         elapsed_ms = (t1 - t0) * 1000
         # materialize the remote result while the connection is open
-        try:
-            result = obtain(remote_result)
-        except Exception as e:
-            # if obtain fails, surface the error and treat the request as failed
-            print(f"Failed to obtain remote result: {e}")
-            return None, None
+        result = obtain(remote_result)
+    except Exception as e:
+        # if obtain fails, surface the error and treat the request as failed
+        print(f"Failed to obtain remote result: {e}")
+        return None, None
     finally:
         try:
             conn.close()
@@ -151,17 +150,20 @@ def mock_loop():
     i = 0
     latencies = []
     client_id = os.getpid()  # unique identifier per container
-    while i<20:
+    while i<100:
         # pick a random document + keyword, and send a request.
         doc = random.choice(docs)
         keyword = random.choice(keyword_list)
         result, elapsed_ms = make_request_timed(doc, keyword)
-        
-        print(f"request #{i+1}: elapsed={elapsed_ms:.3f} ms")
-        print(result)
+        if elapsed_ms is None:
+          print(f"Request failed for {doc} / {keyword}")
+        else:
+          latencies.append(elapsed_ms)
         latencies.append(elapsed_ms)
         i+=1
         time.sleep(MOCK_SEND_INTERVAL / 1000)
+
+    print("All clients made their requests")
     # Write to shared file with lock
     shared_file = "/shared/latencies.txt"
     os.makedirs(os.path.dirname(shared_file), exist_ok=True)

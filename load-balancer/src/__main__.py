@@ -11,24 +11,57 @@ RPYC_SERVER_COUNT = len(RPYC_SERVERS)
 SERVER_HOST = os.environ.get("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "18861"))
 
+# 5 second interval for polling servers for their health status
+HEALTHCHECK_INTERVAL = int(os.environ.get("HEALTHCHECK_INTERVAL", "5"))
+
 conn_counts = [0] * RPYC_SERVER_COUNT
+server_health = [True] * RPYC_SERVER_COUNT
 select_lock = asyncio.Lock()
 
-async def select_server() -> tuple[StreamReader, StreamWriter]:
+async def health_check(): 
+    """Periodically ping each server to see if it's reachable"""
+    global server_health
+    while True: 
+        for i, (host, port) in enumerate(RPYC_SERVERS): 
+            try: 
+                reader, writer = await asyncio.open_connection(host, int(port))
+                writer.close()
+                await writer.wait_closed()
+                if not server_health[i]: 
+                    print(f"[HEALTH] Server {host}:{port} RECOVERED")
+                    server_health[i] = True
+                    print(f"[HEALTH] Servers Health: {server_health}")
+                server_health[i] = True
+            except Exception: 
+                if server_health[i]: 
+                    print(f"[HEALTH] Server {host}:{port} FAILED")
+                    server_health[i] = False
+                    print(f"[HEALTH] Servers Health: {server_health}")
+                server_health[i] = False
+        await asyncio.sleep(HEALTHCHECK_INTERVAL)
+
+async def select_server(attempt=1) -> tuple[StreamReader, StreamWriter]:
+    """Load balancing algorithm -> Least connections algorithm"""
     async with select_lock:
-        idx = min(range(RPYC_SERVER_COUNT), key=lambda i: conn_counts[i])
+        # choose from healthy servers only
+        healthy_idx = [i for i, ok in enumerate(server_health) if ok]
+        if not healthy_idx: 
+            raise ConnectionError("No healthy backend servers available")
+        idx = min(healthy_idx, key=lambda i: conn_counts[i])
         conn_counts[idx] += 1
     hostname, port = RPYC_SERVERS[idx]
     print(f"selecting server '{hostname}:{port}'")
     try:
         reader, writer = await asyncio.open_connection(hostname, int(port))
         return idx, reader, writer
-    except Exception:
+    except Exception as e:
         # Undo increment on failure
         async with select_lock:
             conn_counts[idx] -= 1
-        raise
-
+            server_health[idx] = False
+            print(f"[HEALTH] Servers Health: {server_health}")
+        # Raise a clear error upward so handle_conn() can log it
+        raise ConnectionError(f"Failed to connect to {hostname}:{port}: {e}")
 
 async def forward_stream(rx, wx):
     """
@@ -102,6 +135,7 @@ async def handle_conn(rc: StreamReader, wc: StreamWriter):
 
 
 async def main():
+    asyncio.create_task(health_check())
     server = await asyncio.start_server(handle_conn, SERVER_HOST, SERVER_PORT)
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
     print(f"Serving on {addrs}")
