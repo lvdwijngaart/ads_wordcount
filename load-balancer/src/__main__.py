@@ -38,7 +38,7 @@ rr_counter = 0
 async def select_server_round_robin() -> tuple[int, StreamReader, StreamWriter]:
     global rr_counter
     async with select_lock:
-        rr_counter += 1
+        rr_counter = (rr_counter + 1) % RPYC_SERVER_COUNT
         idx = rr_counter
     hostname, port = RPYC_SERVERS[idx]
     print(f"selecting server '{hostname}:{port}'")
